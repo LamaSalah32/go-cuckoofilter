@@ -1,8 +1,8 @@
 package cuckoofilter
 
 import (
-	"fmt"
-
+	"math"
+	"math/rand"
 	"github.com/cespare/xxhash/v2"
 )
 
@@ -31,55 +31,67 @@ func New(n uint64) *CuckooFilter {
 		f,
 		m,
 		bucketSize,
-		make([]uint64, filterSize),
-		make([]uint, m),
+		make([]uint64, filterSize+2),
+		make([]uint, m+2),
 	}
 }
 
-func (c *CuckooFilter) Insert(data []byte) (bool, error) {
-	if c.Check(data) == true {
-		return false, fmt.Errorf("item already exists")
+func (c *CuckooFilter) Insert(data []byte) bool {
+	if c.Check(data) {
+		return true
 	}
 
-	fp := Fingerprint(data, c.f)
+	fp := fprint(data, c.f)
 	i1 := xxhash.Sum64(data) % c.m
-	i2 := (i1 ^ xxhash.Sum64(data)) % c.m
+	i2 := (i1 ^ xxhash.Sum64([]byte{byte(fp)})) % c.m
 
 	if c.visCount[i1] < c.b {
 		c.visCount[i1]++
-		c.InsertIntoBucket(i1, fp)
-	} else if c.visCount[i2] < c.b {
-		c.visCount[i2]++
-		c.InsertIntoBucket(i2, fp)
+		c.InsertIntoBucket(i1, uint64(fp))
+		return true
 	}
 
-	return true, nil
+	if c.visCount[i2] < c.b {
+		c.visCount[i2]++
+		c.InsertIntoBucket(i2, uint64(fp))
+		return true
+	}
+
+	var i uint64
+	if rand.Intn(2) == 0 {
+		i = i1
+	} else {
+		i = i2
+	}
+
+	MaxNumKicks := int(5 * math.Log2(float64(c.n)))
+	for n := 0; n < MaxNumKicks; n++ {
+		evicted_fp := c.EvictFromBucket(i, uint64(fp))
+		i = (i ^ xxhash.Sum64([]byte{byte(evicted_fp)})) % c.m
+		fp = evicted_fp
+
+		if c.visCount[i] < c.b {
+			c.visCount[i]++
+			c.InsertIntoBucket(i, fp)
+			return true
+		}
+	}
+
+	return false
 }
 
 func (c *CuckooFilter) Check(data []byte) bool {
-	fp := Fingerprint(data, c.f)
+	fp := fprint(data, c.f)
 	i1 := xxhash.Sum64(data) % c.m
-	i2 := (i1 ^ xxhash.Sum64(data)) % c.m
+	i2 := (i1 ^ xxhash.Sum64([]byte{byte(fp)})) % c.m
 
 	return c.CheckBucket(i1, fp) || c.CheckBucket(i2, fp)
 }
 
-func (c *CuckooFilter) Delete(data []byte) (bool, error){
-	fp := Fingerprint(data, c.f)
+func (c *CuckooFilter) Delete(data []byte) bool {
+	fp := fprint(data, c.f)
 	i1 := xxhash.Sum64(data) % c.m
-	i2 := (i1 ^ xxhash.Sum64(data)) % c.m
+	i2 := (i1 ^ xxhash.Sum64([]byte{byte(fp)})) % c.m
 
-	d, err := c.DeleteFromBucket(i1, fp)
-	if err == nil {
-		c.visCount[i1]--
-		return d, err
-	}
-
-	d, err = c.DeleteFromBucket(i2, fp)
-	if err == nil {
-		c.visCount[i2]--
-		return d, err
-	}
-
-	return d, err
+	return c.DeleteFromBucket(i1, fp) || c.DeleteFromBucket(i2, fp) || true
 }
