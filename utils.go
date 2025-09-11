@@ -38,7 +38,7 @@ func MinFingerprintBits(n uint64, b uint) uint {
 	return uint(math.Max(4, math.Ceil(math.Log2(float64(n))/float64(b))))
 }
 
-func SortBucketBits(combIdx []byte, rest uint64, b uint, f uint) ([]byte, uint64) {
+func Sort(combIdx []byte, rest uint64, b uint, f uint) ([]byte, uint64) {
 	slotBits := f - 4
 	bits := make([]uint64, b)
 
@@ -49,7 +49,7 @@ func SortBucketBits(combIdx []byte, rest uint64, b uint, f uint) ([]byte, uint64
 	}
 
 	for i := uint(0); i < b; i++ {
-        for j := uint(0); j < b-i-1; j++ {
+		for j := uint(0); j < b-i-1; j++ {
             if combIdx[j] > combIdx[j+1] {
                 combIdx[j], combIdx[j+1] = combIdx[j+1], combIdx[j]
                 bits[j], bits[j+1] = bits[j+1], bits[j]
