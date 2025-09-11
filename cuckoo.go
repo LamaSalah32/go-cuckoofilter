@@ -23,7 +23,7 @@ func New(n uint64) *CuckooFilter {
 	f := uint(MinFingerprintBits(n, b))
 	bucketSize := uint64((12+((f/4-1)*12)+((f%4)*4))*(b/4) + ((b % 4) * f))
 	filterSize := uint64((n*uint64(f) + 63) / 64)
-	m := (filterSize + 1) / bucketSize
+	m := (filterSize * 64) / bucketSize
 
 	return &CuckooFilter{
 		n,
@@ -32,7 +32,7 @@ func New(n uint64) *CuckooFilter {
 		m,
 		bucketSize,
 		make([]uint64, filterSize+2),
-		make([]uint, m+2),
+		make([]uint, m),
 	}
 }
 
