@@ -1,13 +1,9 @@
 package cuckoofilter
 
 import (
-    "bytes"
-    "math"
+	"bytes"
+	"math"
 )
-
-func swap[T any](s []T, i, j uint) {
-    s[i], s[j] = s[j], s[i]
-}
 
 func ExtractBits(x uint64, start, end uint) uint64 {
 	lsbStart := 63 - end
@@ -42,3 +38,29 @@ func MinFingerprintBits(n uint64, b uint) uint {
 	return uint(math.Max(4, math.Ceil(math.Log2(float64(n))/float64(b))))
 }
 
+func SortBucketBits(combIdx []byte, rest uint64, b uint, f uint) ([]byte, uint64) {
+	slotBits := f - 4
+	bits := make([]uint64, b)
+
+	for i := uint(0); i < b; i++ {
+		shift := (b - 1 - i) * slotBits  
+		mask := (uint64(1) << slotBits) - 1
+		bits[i] = (rest >> shift) & mask
+	}
+
+	for i := uint(0); i < b; i++ {
+        for j := uint(0); j < b-i-1; j++ {
+            if combIdx[j] > combIdx[j+1] {
+                combIdx[j], combIdx[j+1] = combIdx[j+1], combIdx[j]
+                bits[j], bits[j+1] = bits[j+1], bits[j]
+			}
+        }
+    }
+
+	var res uint64 = 0
+	for i := uint(0); i < b; i++ {
+		res |= bits[i] << ((b - 1 - i) * slotBits)
+	}
+
+	return combIdx, res
+}
