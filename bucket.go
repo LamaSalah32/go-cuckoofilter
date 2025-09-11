@@ -1,8 +1,9 @@
 package cuckoofilter
 
 import (
-	"fmt"
+	"math/rand"
 )
+
 
 func (c *CuckooFilter) getBitsFromBucket(start, end uint64) (bucketBits uint64) {
 	if end/64 == start/64 {
@@ -37,66 +38,66 @@ func (c *CuckooFilter) setBitsInBucket(newBits uint64, start, end uint64) {
 }
 
 func (c *CuckooFilter) InsertIntoBucket(idx, fp uint64) bool {
-	var startBit uint64
-	if idx == 0 {
-		startBit = 0
-	} else {
-		startBit = (idx - 1) * c.bucketSize
-	}
-	endBit := startBit + c.bucketSize - 1
-	var bits = c.getBitsFromBucket(startBit, endBit)
+	startBit := idx * c.bucketSize
+	bits := c.getBitsFromBucket(startBit, startBit + c.bucketSize - 1)
+	first12 := bits >> (c.bucketSize - 12)
 
-	first12Bits := bits >> (c.bucketSize - 12)
+	combination := append([]byte(nil), Comb[first12]...)
 
-	combIdx := append([]byte(nil), Comb[first12Bits]...)
+	insertPos := c.b - c.visCount[idx]
+	combination[insertPos] = byte(fp >> (c.f - 4))
+	c.setBitsInBucket(
+		fp & ((1 << (c.f - 4)) - 1), 
+		startBit + 12 + uint64(insertPos)*uint64(c.f-4), 
+		startBit + 12 + uint64(insertPos+1)*uint64(c.f-4)-1,
+	)
 
-	lastFourBits := fp >> (c.f - 4)
-	combIdx[0] = byte(lastFourBits)
+	resBits := c.getBitsFromBucket(startBit+12, startBit+c.bucketSize-1)
+	combination, resBits = Sort(combination, resBits, c.b, c.f)
 
-	var correctPos uint
-	for i := uint(0); i < 3; i++ {
-		if combIdx[i] > combIdx[i+1] {
-			swap(combIdx, i, i+1)
-			correctPos = i + 1
-		}
-	}
-
-	newBits := uint64(IndexLockup(combIdx))
-
-	c.setBitsInBucket(newBits, startBit, startBit+11)
-
-	restBits := fp & ((1 << (c.f - 4)) - 1)
-
-	sRest := startBit + 12 + uint64(correctPos*(c.f-4))
-	c.setBitsInBucket(restBits, sRest, sRest+uint64(c.f-4)-1)
+	newFirst12 := uint64(IndexLockup(combination))
+	c.setBitsInBucket(newFirst12, startBit, startBit+11)
+	c.setBitsInBucket(resBits, startBit+12, startBit+c.bucketSize-1)
 
 	return true
 }
 
+func (c *CuckooFilter) ReplaceInBucket(idx uint64, pos int, fp uint64) {
+    startBit := idx * c.bucketSize
+    first12 := c.getBitsFromBucket(startBit, startBit+11)
+
+    combination := append([]byte(nil), Comb[first12]...)
+    combination[pos] = byte(fp >> (c.f - 4))
+	c.setBitsInBucket(
+		fp & ((1 << (c.f - 4)) - 1),
+		startBit + 12 + uint64(pos)*uint64(c.f-4),
+		startBit + 12 + uint64(pos+1)*uint64(c.f-4)-1,
+	)
+
+    resBits := c.getBitsFromBucket(startBit+12, startBit+c.bucketSize-1)
+    combination, resBits = Sort(combination, resBits, c.b, c.f)
+
+	newFirst12 := uint64(IndexLockup(combination))
+	c.setBitsInBucket(newFirst12, startBit, startBit+11)
+    c.setBitsInBucket(resBits, startBit+12, startBit+c.bucketSize-1)
+}
+
 func (c *CuckooFilter) CheckBucket(idx uint64, fp uint64) bool {
-	var startBit uint64
-	if idx == 0 {
-		startBit = 0
-	} else {
-		startBit = (idx - 1) * c.bucketSize
-	}
+	startBit := idx * c.bucketSize
+	bits := c.getBitsFromBucket(startBit, startBit + c.bucketSize - 1)
+	first12 := bits >> (c.bucketSize - 12)
 
-	endBit := startBit + c.bucketSize - 1
-	var bits = c.getBitsFromBucket(startBit, endBit)
-
-	first12Bits := bits >> (c.bucketSize - 12)
-
-	combIdx := append([]byte(nil), Comb[first12Bits]...)
-	lastFourBits := fp >> (c.f - 4)
+	combination := append([]byte(nil), Comb[first12]...)
+	last4 := fp >> (c.f - 4)
 
 	for i := uint64(0); i < uint64(c.b); i++ {
-		if combIdx[i] == byte(lastFourBits) {
-			// check rest
-			sRest := uint64(startBit + 12 + uint64(i*uint64(c.f-4)))
-			restBits := c.getBitsFromBucket(sRest, sRest+uint64(c.f-4)-1)
+		if combination[i] == byte(last4) {
+			restBits := c.getBitsFromBucket(
+				uint64(startBit + 12 + i*uint64(c.f-4)),
+				uint64(startBit + 12 + (i+1)*uint64(c.f-4) - 1),
+			)
 
 			fpRest := fp & ((1 << (c.f - 4)) - 1)
-
 			if restBits == fpRest {
 				return true
 			}
@@ -106,44 +107,55 @@ func (c *CuckooFilter) CheckBucket(idx uint64, fp uint64) bool {
 	return false
 }
 
-func (c *CuckooFilter) DeleteFromBucket(idx uint64, fp uint64) (bool, error) {
-	var startBit uint64
-	if idx == 0 {
-		startBit = 0
-	} else {
-		startBit = (idx - 1) * c.bucketSize
-	}
+func (c *CuckooFilter) DeleteFromBucket(idx uint64, fp uint64) bool {
+	startBit := idx * c.bucketSize
+	bits := c.getBitsFromBucket(startBit, startBit + c.bucketSize - 1)
+	first12 := bits >> (c.bucketSize - 12)
 
-	endBit := startBit + c.bucketSize - 1
-	var bits = c.getBitsFromBucket(startBit, endBit)
-
-
-	first12Bits := bits >> (c.bucketSize - 12)
-	combIdx := append([]byte(nil), Comb[first12Bits]...)
-	lastFourBits := fp >> (c.f - 4)
-
+	combination := append([]byte(nil), Comb[first12]...)
+	last4 := fp >> (c.f - 4)
+	
 	for i := uint64(0); i < uint64(c.b); i++ {
-		if combIdx[i] == byte(lastFourBits) {
+		if combination[i] == byte(last4) {
 			// check rest
 			sRest := uint64(startBit + 12 + uint64(i*uint64(c.f-4)))
 			restBits := c.getBitsFromBucket(sRest, sRest+uint64(c.f-4)-1)
 
 			fpRest := fp & ((1 << (c.f - 4)) - 1)
-
+			
 			if restBits == fpRest {
 				// delete
-				combIdx[i] = 0
-				for j := uint(i); j > 0; j-- {
-					swap(combIdx, j, uint(j-1))
-				}
-
-				newBits := uint64(IndexLockup(combIdx))
-				c.setBitsInBucket(newBits, startBit, startBit+11)
+				combination[i] = 0
 				c.setBitsInBucket(0, sRest, sRest+uint64(c.f-4)-1)
-				return true, nil
+				rest := c.getBitsFromBucket(startBit+12, startBit+c.bucketSize-1)
+				
+				combination, rest = Sort(combination, rest, c.b, c.f)
+
+				newFirst12 := uint64(IndexLockup(combination))
+				c.setBitsInBucket(newFirst12, startBit, startBit+11)
+				c.setBitsInBucket(rest, startBit+12, startBit+c.bucketSize-1)
+
+				c.visCount[idx]--
+				return true
 			}
 		}
 	}
 
-	return false, fmt.Errorf("can not find fingerprint in bucket to delete")
+	return false
+}
+
+func (c *CuckooFilter) EvictFromBucket(idx uint64, fp uint64) uint64 {
+	r := rand.Intn(int(c.b))
+	startBit := idx * c.bucketSize
+	var first12 = c.getBitsFromBucket(startBit, startBit+11)
+	pos_r := Comb[first12][r]
+
+	restBits := c.getBitsFromBucket(
+		startBit+12+uint64(r)*uint64(c.f-4),
+		startBit+12+uint64(r+1)*uint64(c.f-4)-1,
+	)
+
+	evicted_fp := (uint64(pos_r) << (c.f - 4)) | restBits
+	c.ReplaceInBucket(idx, r, fp)
+	return evicted_fp
 }
