@@ -38,7 +38,7 @@ func New(n uint64) *CuckooFilter {
 }
 
 func (c *CuckooFilter) Insert(data []byte) bool {
-	if c.Check(data) {
+	if c.Contain(data) {
 		return true
 	}
 
@@ -80,14 +80,14 @@ func (c *CuckooFilter) Insert(data []byte) bool {
 	return false
 }
 
-func (c *CuckooFilter) Check(data []byte) bool {
+func (c *CuckooFilter) Contain(data []byte) bool {
 	fp := fprint(data, c.f)
 	i1 := hash(data) & c.mask
 	hfp := hash([]byte{byte(fp)}) & c.mask
 	i2 := (i1 ^ hfp) & c.mask
 
 
-	return c.CheckBucket(i1, fp) || c.CheckBucket(i2, fp)
+	return c.ContainBucket(i1, fp) || c.ContainBucket(i2, fp)
 }
 
 func (c *CuckooFilter) Delete(data []byte) bool {
