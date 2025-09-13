@@ -65,7 +65,7 @@ func (c *CuckooFilter) InsertIntoBucket(idx uint64, pos int, fp uint64) bool {
 	return true
 }
 
-func (c *CuckooFilter) CheckBucket(idx uint64, fp uint64) bool {
+func (c *CuckooFilter) ContainBucket(idx uint64, fp uint64) bool {
 	startBit := idx * c.bucketSize
 	bits := c.getBitsFromBucket(startBit, startBit + c.bucketSize - 1)
 	combIdx := bits >> (c.bucketSize - 12)
