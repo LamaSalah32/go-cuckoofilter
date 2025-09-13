@@ -55,7 +55,7 @@ import (
 
 func main() {
     // Create a new filter
-    cf := cuckoofilter.New(10000)
+    cf := cuckoo.New(100000)
 
     // Insert items
     cf.Insert([]byte("go"))
