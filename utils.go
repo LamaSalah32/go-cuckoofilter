@@ -1,9 +1,12 @@
 package cuckoofilter
 
 import (
+	"math/bits"
 	"bytes"
 	"math"
 )
+
+var Comb = GenerateCombinations(16, 4)
 
 func ExtractBits(x uint64, start, end uint) uint64 {
 	lsbStart := 63 - end
@@ -36,6 +39,18 @@ func MinFingerprintBits(n uint64, b uint) uint {
 	}
 
 	return uint(math.Max(4, math.Ceil(math.Log2(float64(n))/float64(b))))
+}
+
+func nextPow2(m uint64) uint64 {
+    if m == 0 {
+        return 1
+    }
+	
+    if (m & (m - 1)) == 0 {
+        return m 
+    }
+
+    return 1 << (64 - bits.LeadingZeros64(m-1))
 }
 
 func Sort(combIdx []byte, rest uint64, b uint, f uint) ([]byte, uint64) {
