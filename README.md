@@ -30,3 +30,42 @@ This implementation leverages the **semi-sorting buckets technique**, inspired b
 - With semi-sorting, there are only **3,876 unique sorted combinations**.
 - These can be indexed with just **12 bits** (2¹² = 4096 > 3876).
 - **Result:** 1 bit saved per fingerprint (16 → 12 bits per bucket).
+
+
+## API
+
+The Cuckoo Filter provides the following operations:
+
+- **`Insert(item)`** Adds an item to the filter.
+
+- **`Contain(item)`** Checks whether an item is in the filter. *Note:* This operation may return **false positives**.
+
+- **`Delete(item)`** Removes an item from the filter.  
+
+
+## Example
+
+```go
+package main
+
+import (
+    "fmt"
+    cuckoo "github.com/lamasalah32/go-cuckoofilter"
+)
+
+func main() {
+    // Create a new filter
+    cf := cuckoofilter.New(10000)
+
+    // Insert items
+    cf.Insert([]byte("go"))
+    cf.Insert([]byte("rust"))
+
+    // Check for containment
+    fmt.Println("Contains rust:", cf.Contain([]byte("rust")))   // true
+    fmt.Println("Contains c++:", cf.Contain([]byte("c++"))) // false (may be false positive in some cases)
+
+    // Delete an item
+    cf.Delete([]byte("rust"))
+    fmt.Println("Contains rust after delete:", cf.Contain([]byte("rust"))) // false
+}
