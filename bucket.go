@@ -12,8 +12,8 @@ func (c *CuckooFilter) getBitsFromBucket(start, end uint64) (bucketBits uint64) 
 	if end/64 == start/64 {
 		bucketBits = ExtractBits(c.bucket[start/64], uint(start%64), uint(end%64))
 	} else {
-		part1 := ExtractBits(c.bucket[start/64], uint(start%64), 63)
-		part2 := ExtractBits(c.bucket[end/64], 0, uint(end%64))
+		part1 := c.getBitsFromBucket(start, (start/64+1)*64-1)
+		part2 := c.getBitsFromBucket((end/64)*64, end)
 		bucketBits = part1<<(end%64+1) | part2
 	}
 
@@ -28,7 +28,7 @@ func (c *CuckooFilter) setBitsInBucket(newBits uint64, start, end uint64) {
 	if end/64 == start/64 {
 		bitLen := end - start + 1
 		mask := ((uint64(1) << bitLen) - 1) << (64 - (end%64 + 1))
-		c.bucket[start/64] = (c.bucket[start/64] & ^mask) | (uint64(newBits) << (64 - (end%64 + 1)))
+		c.bucket[start/64] = (c.bucket[start/64] & ^ mask) | (uint64(newBits) << (64 - (end%64 + 1)))
 	} else {
 		leftBits := 64 - (start % 64)
 		rightBits := end%64 + 1
@@ -43,8 +43,7 @@ func (c *CuckooFilter) setBitsInBucket(newBits uint64, start, end uint64) {
 
 func (c *CuckooFilter) InsertIntoBucket(idx uint64, pos int, fp uint64) bool {
 	startBit := idx * c.bucketSize
-	bits := c.getBitsFromBucket(startBit, startBit + c.bucketSize - 1)
-	combIdx := bits >> (c.bucketSize - 12)
+	combIdx := c.getBitsFromBucket(startBit, startBit+11)
 
 	combination := append([]byte(nil), Comb[int(combIdx)]...)
 	combination[pos] = byte(fp >> (c.f - 4))
@@ -67,8 +66,7 @@ func (c *CuckooFilter) InsertIntoBucket(idx uint64, pos int, fp uint64) bool {
 
 func (c *CuckooFilter) ContainBucket(idx uint64, fp uint64) bool {
 	startBit := idx * c.bucketSize
-	bits := c.getBitsFromBucket(startBit, startBit + c.bucketSize - 1)
-	combIdx := bits >> (c.bucketSize - 12)
+	combIdx := c.getBitsFromBucket(startBit, startBit+11)
 
 	combination := append([]byte(nil), Comb[int(combIdx)]...)
 
@@ -90,8 +88,7 @@ func (c *CuckooFilter) ContainBucket(idx uint64, fp uint64) bool {
 
 func (c *CuckooFilter) DeleteFromBucket(idx uint64, fp uint64) bool {
 	startBit := idx * c.bucketSize
-	bits := c.getBitsFromBucket(startBit, startBit + c.bucketSize - 1)
-	combIdx := bits >> (c.bucketSize - 12)
+	combIdx := c.getBitsFromBucket(startBit, startBit+11)
 
 	combination := append([]byte(nil), Comb[int(combIdx)]...)
 	
@@ -105,7 +102,6 @@ func (c *CuckooFilter) DeleteFromBucket(idx uint64, fp uint64) bool {
 
 		if val == fp {
 			sRest := uint64(startBit + 12 + uint64(i*uint64(c.f-4)))
-		
 			combination[i] = 0
 			c.setBitsInBucket(0, sRest, sRest+uint64(c.f-4)-1)
 			rest := c.getBitsFromBucket(startBit+12, startBit+c.bucketSize-1)
@@ -141,3 +137,4 @@ func (c *CuckooFilter) EvictFromBucket(idx uint64, fp uint64) uint64 {
 	c.InsertIntoBucket(idx, r, fp)
 	return evicted_fp
 }
+
