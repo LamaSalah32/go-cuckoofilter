@@ -3,7 +3,6 @@ package cuckoofilter
 import (
 	"math/bits"
 	"bytes"
-	"math"
 )
 
 var Comb = GenerateCombinations(16, 4)
@@ -31,14 +30,6 @@ func IndexLockup(fp []byte) uint {
 	}
 
 	return uint(l)
-}
-
-func MinFingerprintBits(n uint64, b uint) uint {
-	if n == 0 || b == 0 {
-		return 0
-	}
-
-	return uint(math.Max(4, math.Ceil(math.Log2(float64(n))/float64(b))))
 }
 
 func nextPow2(m uint64) uint64 {
